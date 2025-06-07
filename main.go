@@ -3,11 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 )
-
-const bufferSize = 1024
 
 func main() {
 	// Listen for incoming TCP connection on PORT:8080
@@ -40,13 +41,42 @@ func handleRequest(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 
 	for {
-		message, err := reader.ReadString('\n')
+		header, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println("Connection Close :", err)
 			return
 		}
 
-		fmt.Println("Received :", message)
+		header = strings.TrimSpace(header)
+		parts := strings.Split(header, "|")
+		if len(parts) != 3 || parts[0] != "STORE" {
+			fmt.Println("Invalid header:", header)
+			return
+		}
+		fileName := parts[1]
+		fileSize, err := strconv.Atoi(parts[2])
+		if err != nil {
+			fmt.Println("Invalid filesize:", parts[2])
+			return
+		}
+
+		fmt.Printf("Receiving file: %s (%d bytes)\n", fileName, fileSize)
+		
+		// Create file to write
+		file, err := os.Create(fileName)
+		if err != nil {
+			fmt.Println("Error creating file:", err)
+			return
+		}
+		defer file.Close()
+
+		// Copy file data from connection to file
+		written, err := io.CopyN(file, reader, int64(fileSize))
+		if err != nil {
+			fmt.Println("Error receiving file data:", err)
+			return
+		}
+		fmt.Printf("File %s received (%d bytes)\n", fileName, written)
 	}
 
 }
