@@ -1,0 +1,15 @@
+My name is Abhishek, currently I am Software Developer Engineer at Kloudstac
+
+
+Advantages of Distributed File System(DFS)
+DFS allows multiple user to access or store the data.
+It allows the data to be share remotely.
+It improved the availability of file, access time, and network efficiency.
+Improved the capacity to change the size of the data and also improves the ability to exchange the data.
+Distributed File System provides transparency of data even if server or disk fails.
+Disadvantages of Distributed File System(DFS)
+In Distributed File System nodes and connections needs to be secured therefore we can say that security is at stake.
+There is a possibility of lose of messages and data in the network while movement from one node to another.
+Database connection in case of Distributed File System is complicated.
+Also handling of the database is not easy in Distributed File System as compared to a single user system.
+There are chances that overloading will take place if all nodes tries to send dat
