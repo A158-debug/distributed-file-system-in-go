@@ -6,77 +6,81 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 func main() {
-	// Listen for incoming TCP connection on PORT:8080
-	listenAddr := ":8080"
-	listner, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		fmt.Println("Failed to start server", err)
-		os.Exit(1)
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: go run main.go [PORT] [STORAGE_DIR]")
+		return
+	}
+	port := os.Args[1]
+	storageDir := os.Args[2]
+
+	// Create storage directory if it doesn't exist
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		fmt.Println("Error creating storage directory:", err)
+		return
 	}
 
-	defer listner.Close()
+	ln, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		fmt.Println("Error starting server:", err)
+		return
+	}
+	fmt.Printf("Node listening on port %s, storing chunks in %s\n", port, storageDir)
+
 	for {
-		// Waits for a connection
-		conn, err := listner.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
-			fmt.Println("Error in Accepting", err)
-			os.Exit(1)
+			fmt.Println("Error accepting connection:", err)
+			continue
 		}
-
-		// Handle the connection in a new goroutine
-		// Multiple connection served concurrently
-		go handleRequest(conn)
-
+		go handleConnection(conn, storageDir)
 	}
 }
 
-func handleRequest(conn net.Conn) {
+func handleConnection(conn net.Conn, storageDir string) {
 	defer conn.Close()
-
 	reader := bufio.NewReader(conn)
 
-	for {
-		header, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Connection Close :", err)
-			return
-		}
-
-		header = strings.TrimSpace(header)
-		parts := strings.Split(header, "|")
-		if len(parts) != 3 || parts[0] != "STORE" {
-			fmt.Println("Invalid header:", header)
-			return
-		}
-		fileName := parts[1]
-		fileSize, err := strconv.Atoi(parts[2])
-		if err != nil {
-			fmt.Println("Invalid filesize:", parts[2])
-			return
-		}
-
-		fmt.Printf("Receiving file: %s (%d bytes)\n", fileName, fileSize)
-		
-		// Create file to write
-		file, err := os.Create(fileName)
-		if err != nil {
-			fmt.Println("Error creating file:", err)
-			return
-		}
-		defer file.Close()
-
-		// Copy file data from connection to file
-		written, err := io.CopyN(file, reader, int64(fileSize))
-		if err != nil {
-			fmt.Println("Error receiving file data:", err)
-			return
-		}
-		fmt.Printf("File %s received (%d bytes)\n", fileName, written)
+	// Read header: CHUNK|chunkID|size\n
+	// Reads bytes from the connection until it encounters a newline character (\n)
+	header, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading header:", err)
+		return
 	}
+	header = strings.TrimSpace(header)
+	parts := strings.Split(header, "|")
+	if len(parts) != 3 || parts[0] != "CHUNK" {
+		fmt.Println("Invalid header:", header)
+		return
+	}
+	chunkID := parts[1]
+	size, err := strconv.Atoi(parts[2])
+	if err != nil {
+		fmt.Println("Invalid chunk size:", parts[2])
+		return
+	}
+	fmt.Printf("Receiving chunk: %s (%d bytes)\n", chunkID, size)
 
+	// Create file to write chunk
+	chunkPath := filepath.Join(storageDir, chunkID)
+	file, err := os.Create(chunkPath)
+	if err != nil {
+		fmt.Println("Error creating chunk file:", err)
+		return
+	}
+	defer file.Close()
+
+	// Copy chunk data from connection to file
+	written, err := io.CopyN(file, reader, int64(size))
+	if err != nil {
+		fmt.Println("Error receiving chunk data:", err)
+		return
+	}
+	fmt.Printf("Chunk %s stored (%d bytes)\n", chunkID, written)
 }

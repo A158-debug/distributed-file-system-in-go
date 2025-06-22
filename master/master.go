@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"math/rand"
 )
 
 type ChunkInfo struct {
@@ -55,7 +56,8 @@ func (m *Master) handleConnection(conn net.Conn) {
 		// Request: {type: "get_chunk_placement", filename: "...", num_chunks: N}
 		filename := req["filename"].(string)
 		numChunks := int(req["num_chunks"].(float64))
-		placements := m.assignChunks(filename, numChunks)
+		replicationFactor := int(req["replication_factor"].(float64))
+		placements := m.assignChunks(filename, numChunks, replicationFactor)
 		encoder.Encode(placements)
 
 	case "register_chunks":
@@ -87,17 +89,23 @@ Assign chunks to nodes for a given file
 This function generates chunk IDs and assigns them to all nodes.
 Returns a slice of ChunkInfo which contains the chunk ID and the list of node addresses where the chunk is stored.
 */
-func (m *Master) assignChunks(filename string, numChunks int) []ChunkInfo {
+func (m *Master) assignChunks(filename string, numChunks int, replicationFactor int) []ChunkInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	placement := []ChunkInfo{}
 	for i := 0; i < numChunks; i++ {
 		chunkID := fmt.Sprintf("%s_chunk_%03d", filename, i)
 
-		locationAddress := make([]string, len(m.nodes))
-		copy(locationAddress, m.nodes)
+		// locationAddress := make([]string, len(m.nodes))
+		// copy(locationAddress, m.nodes)
+		nodesCopy := append([]string{}, m.nodes...) // Create a copy of the nodes slice
+		rand.Shuffle(len(nodesCopy), func(i, j int) {
+			nodesCopy[i], nodesCopy[j] = nodesCopy[j], nodesCopy[i]
+		})
+		locationAddress := nodesCopy[:replicationFactor]
 
 		placement = append(placement, ChunkInfo{ChunkID: chunkID, Locations: locationAddress})
+		// fmt.Println(placement)
 	}
 	return placement
 }
